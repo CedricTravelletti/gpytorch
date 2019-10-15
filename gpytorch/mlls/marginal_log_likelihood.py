@@ -6,11 +6,17 @@ from ..models import GP
 
 class MarginalLogLikelihood(Module):
     """
-    A module to compute marginal log likelihoods of data
+    A module to compute the marginal log likelihood (MLL) of the GP model (or an approximate/bounded MLL)
+    when applied to data.
+
+    These models are typically used as the "loss" functions for GP models (though note that the output of
+    these functions must be negated for optimization).
 
     Args:
-    - likelihood: (Likelihood) - the likelihood for the model
-    - model: (Module) - the GP model
+        :attr:`likelihood` (:obj:`gpytorch.likelihoods.Likelihood`):
+            The likelihood for the model
+        :attr:`model` (:obj:`gpytorch.models.GP`):
+            The approximate GP model
     """
 
     def __init__(self, likelihood, model):
@@ -26,8 +32,12 @@ class MarginalLogLikelihood(Module):
 
     def forward(self, output, target):
         """
+        Computes the loss
+
         Args:
-        - output: (MultivariateNormal) - the outputs of the latent function
-        - target: (Variable) - the target values
+            :attr:`output` (:obj:`gpytorch.distributions.MultivariateNormal`):
+                The outputs of the latent function (the :obj:`gpytorch.models.GP`)
+            :attr:`target` (`torch.Tensor`):
+                The target values (:math:`y`)
         """
         raise NotImplementedError
