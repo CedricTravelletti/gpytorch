@@ -31,13 +31,13 @@ niklas_data_path = "/home/ubuntu/Dev/Data/Cedric.mat"
 inverseProblem = InverseProblem.from_matfile(niklas_data_path)
 n_data = inverseProblem.n_data
 
-F = torch.as_tensor(inverseProblem.forward).detach().double()
+F = torch.as_tensor(inverseProblem.forward).detach().float()
 
 # Careful: we have to make a column vector here.
 d_obs = torch.as_tensor(inverseProblem.data_values[:, None]).detach()
 d_obs_loc = torch.as_tensor(inverseProblem.data_points).detach()
 
-cells_coords = torch.as_tensor(inverseProblem.cells_coords).detach()
+cells_coords = torch.as_tensor(inverseProblem.cells_coords).detach().float()
 
 # ----------------------------------------------------------------------------
 # End Load Niklas Data.
@@ -47,23 +47,94 @@ cells_coords = torch.as_tensor(inverseProblem.cells_coords).detach()
 import numpy as np
 
 N = d_obs.shape[0]
-train_x, train_y = d_obs_loc, d_obs
+train_x_nik, train_y_nik = d_obs_loc.float(), d_obs.reshape(-1).float()
+
+# TEMP
+train_x_nik = cells_coords
+train_y_nik = cells_coords[0, :]
+
+# normalize features
+mean = train_x_nik.mean(dim=-2, keepdim=True)
+std = train_x_nik.std(dim=-2, keepdim=True) + 1e-6 # prevent dividing by 0
+train_x_nik = (train_x_nik - mean) / std
+
+# normalize labels
+mean, std = train_y_nik.mean(),train_y_nik.std()
+train_y_nik = (train_y_nik - mean) / std
+
+# make continguous
+train_x_nik, train_y_nik = train_x_nik.contiguous(), train_y_nik.contiguous()
+
+output_device = torch.device('cuda:0')
+
+train_y_nik = train_x_nik[:, 0]
+train_x_nik, train_y_nik = train_x_nik.to(output_device), train_y_nik.to(output_device)
+
+
+# ----------------------------------------------------------------------------
+# Begin Prev Data
+# ----------------------------------------------------------------------------
+import os
+import urllib.request
+from scipy.io import loadmat
+dataset = 'protein'
+if not os.path.isfile(f'{dataset}.mat'):
+    print(f'Downloading \'{dataset}\' UCI dataset...')
+    urllib.request.urlretrieve('https://drive.google.com/uc?export=download&id=1nRb8e7qooozXkNghC5eQS0JeywSXGX2S',
+                               f'{dataset}.mat')
+    
+data = torch.Tensor(loadmat(f'{dataset}.mat')['data'])
+
+
+# ## Normalization and train/test Splits
+# 
+# In the next cell, we split the data 80/20 as train and test, and do some basic z-score feature normalization.
+
+# In[3]:
+
+
+import numpy as np
+
+N = data.shape[0]
+# make train/val/test
+n_train = int(0.8 * N)
+train_x, train_y = data[:n_train, :-1], data[:n_train, -1]
+test_x, test_y = data[n_train:, :-1], data[n_train:, -1]
 
 # normalize features
 mean = train_x.mean(dim=-2, keepdim=True)
 std = train_x.std(dim=-2, keepdim=True) + 1e-6 # prevent dividing by 0
 train_x = (train_x - mean) / std
+test_x = (test_x - mean) / std
 
 # normalize labels
 mean, std = train_y.mean(),train_y.std()
 train_y = (train_y - mean) / std
+test_y = (test_y - mean) / std
 
 # make continguous
 train_x, train_y = train_x.contiguous(), train_y.contiguous()
+test_x, test_y = test_x.contiguous(), test_y.contiguous()
 
 output_device = torch.device('cuda:0')
 
-train_x, train_y = train_x.to(output_device), train_y.to(output_device)
+train_x_orig, train_y_orig = train_x.to(output_device), train_y.to(output_device)
+test_x, test_y = test_x.to(output_device), test_y.to(output_device)
+
+
+
+# ----------------------------------------------------------------------------
+# End Prev Data
+# ----------------------------------------------------------------------------
+
+
+# IMPORTANT
+# IMPORTANT
+train_y_tmp = train_y[:train_y_nik.shape[0]]
+
+
+# IMPORTANT
+# IMPORTANT
 
 
 # ## How many GPUs do you want to use?
@@ -96,11 +167,12 @@ class ExactGPModel(gpytorch.models.ExactGP):
 
         # Ambitious. We are working with lazy tensors, so may have to lazify F
         # and change the multiply operation.
-        pushfwd_covar_x = torch.mm(F,
-                covar_x._matmul(F.t()))
-        pushfwd_mean_x = torch.mm(F, mean_x)
+        # tmp = covar_x._matmul(F.t())
+        # pushfwd_covar_x = torch.mm(F, tmp)
+        # pushfwd_mean_x = torch.mm(F, mean_x)
 
-        return gpytorch.distributions.MultivariateNormal(mean_x, pushfwd_covar_x)
+        # return gpytorch.distributions.MultivariateNormal(pushfwd_mean_x, pushfwd_covar_x)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
 def train(train_x,
           train_y,
@@ -120,20 +192,28 @@ def train(train_x,
     # "Loss" for GPs - the marginal log likelihood
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
+    print("Here 1")
     
-    with gpytorch.beta_features.checkpoint_kernel(checkpoint_size),          gpytorch.settings.max_preconditioner_size(preconditioner_size):
+    with gpytorch.beta_features.checkpoint_kernel(checkpoint_size), gpytorch.settings.max_preconditioner_size(preconditioner_size):
 
         def closure():
+            print("Zeroing Grads")
             optimizer.zero_grad()
+            print("Zeroed Grads")
             output = model(train_x)
+            print("Computed output")
             loss = -mll(output, train_y)
+            print("Ran closure")
             return loss
 
         loss = closure()
         loss.backward()
 
+        print("Ran backward")
+
         for i in range(n_training_iter):
             options = {'closure': closure, 'current_loss': loss, 'max_ls': 10}
+            print("Begin Optim")
             loss, _, _, _, _, _, _, fail = optimizer.step(options)
             
             print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
@@ -194,10 +274,12 @@ def find_best_gpu_setting(train_x,
 
 # Set a large enough preconditioner size to reduce the number of CG iterations run
 preconditioner_size = 100
-checkpoint_size = find_best_gpu_setting(train_x, train_y,
+checkpoint_size = find_best_gpu_setting(train_x_nik, train_y_nik,
                                         n_devices=n_devices, 
                                         output_device=output_device,
                                         preconditioner_size=preconditioner_size)
+
+print("Found checkpoint size of {}".format(checkpoint_size))
 
 
 # # Training
