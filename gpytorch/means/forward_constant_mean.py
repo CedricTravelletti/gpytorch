@@ -17,7 +17,7 @@ from ..utils.deprecation import _deprecate_kwarg_with_transform
 
 
 class ForwardConstantMean(Mean):
-    def __init__(self, prior=None, batch_shape=torch.Size(), **kwargs):
+    def __init__(self, F, prior=None, batch_shape=torch.Size(), **kwargs):
         batch_shape = _deprecate_kwarg_with_transform(
             kwargs, "batch_size", "batch_shape", batch_shape, lambda n: torch.Size([n])
         )
@@ -26,9 +26,11 @@ class ForwardConstantMean(Mean):
         self.register_parameter(name="constant", parameter=torch.nn.Parameter(torch.zeros(*batch_shape, 1)))
         if prior is not None:
             self.register_prior("mean_prior", prior, "constant")
+        self.F = F
 
-    def forward(self, input, F):
+    def forward(self, input):
         if input.shape[:-2] == self.batch_shape:
-            return torch.mm(F, self.constant.expand(input.shape[:-1]))
+            print("Forwarding mean.")
+            return torch.mm(self.F, self.constant.expand(input.shape[:-1]))
         else:
             return self.constant.expand(_mul_broadcast_shape(input.shape[:-1], self.constant.shape))
