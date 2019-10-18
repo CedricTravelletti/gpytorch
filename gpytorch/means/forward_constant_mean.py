@@ -30,7 +30,10 @@ class ForwardConstantMean(Mean):
 
     def forward(self, input):
         if input.shape[:-2] == self.batch_shape:
-            print("Forwarding mean.")
-            return torch.mm(self.F, self.constant.expand(input.shape[:-1]))
+            
+            a = torch.mm(self.F,
+                    self.constant.expand(input.shape[:-1]).unsqueeze(1))
+            # return self.constant.expand(input.shape[:-1])
+            return a.squeeze()
         else:
             return self.constant.expand(_mul_broadcast_shape(input.shape[:-1], self.constant.shape))

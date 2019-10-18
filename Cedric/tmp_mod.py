@@ -80,11 +80,11 @@ n_train = int(0.8 * N)
 train_x, train_y = data[:n_train, :-1], data[:n_train, -1]
 test_x, test_y = data[n_train:, :-1], data[n_train:, -1]
 
-train_x = cells_coords[:, :]
-test_x = cells_coords[:test_x.shape[0], :]
+# train_x = cells_coords[:20000, :]
+# test_x = cells_coords[:test_x.shape[0], :]
 
-train_y = cells_coords[:, 1]
-test_y = cells_coords[:test_y.shape[0], 0]
+# train_y = cells_coords[:20000, 1]
+# test_y = cells_coords[:test_y.shape[0], 0]
 
 print(train_x.shape[0])
 
@@ -129,7 +129,7 @@ print('Planning to run on {} GPUs.'.format(n_devices))
 
 # In[5]:
 
-F = torch.eye(train_x.shape[0])
+F = torch.eye(train_x.shape[0]).to(output_device)
 
 class ExactGPModel(gpytorch.models.ExactGP):
     def __init__(self, train_x, train_y, likelihood, n_devices):
