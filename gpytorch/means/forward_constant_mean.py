@@ -21,7 +21,7 @@ class ForwardConstantMean(Mean):
         batch_shape = _deprecate_kwarg_with_transform(
             kwargs, "batch_size", "batch_shape", batch_shape, lambda n: torch.Size([n])
         )
-        super(ConstantMean, self).__init__()
+        super(ForwardConstantMean, self).__init__()
         self.batch_shape = batch_shape
         self.register_parameter(name="constant", parameter=torch.nn.Parameter(torch.zeros(*batch_shape, 1)))
         if prior is not None:
