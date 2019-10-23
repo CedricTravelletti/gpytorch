@@ -49,7 +49,8 @@ data = torch.Tensor(loadmat(f'{dataset}.mat')['data'])
 # ----------------------------------------------------------------------------
 from volcapy.inverse.inverse_problem import InverseProblem
 # niklas_data_path = "/idiap/temp/ctravelletti/tflow/Volcano/data/Cedric.mat"
-niklas_data_path = "/home/ubuntu/Dev/Data/Cedric.mat"
+# niklas_data_path = "/home/ubuntu/Dev/Data/Cedric.mat"
+niklas_data_path = "/idiap/temp/ctravelletti/tflow/Volcano/data/Cedric.mat"
 inverseProblem = InverseProblem.from_matfile(niklas_data_path)
 n_data = inverseProblem.n_data
 
@@ -270,10 +271,13 @@ model, likelihood = train(train_x, train_y,
 model.eval()
 likelihood.eval()
 
+# HAVE TO COMMENT THE BELOW BECAUSE WE BROKE SIZE INDEPENDENCE.
+"""
 with torch.no_grad(), gpytorch.settings.fast_pred_var(), gpytorch.beta_features.checkpoint_kernel(1000):
     # Make predictions on a small number of test points to get the test time caches computed
     latent_pred = model(test_x[:2, :])
     del latent_pred  # We don't care about these predictions, we really just want the caches.
+"""
 
 
 # # Testing: Computing predictions
@@ -281,11 +285,13 @@ with torch.no_grad(), gpytorch.settings.fast_pred_var(), gpytorch.beta_features.
 # In[11]:
 
 
+"""
 with torch.no_grad(), gpytorch.settings.fast_pred_var(), gpytorch.beta_features.checkpoint_kernel(1000):
     get_ipython().run_line_magic('time', 'latent_pred = model(test_x)')
     
 test_rmse = torch.sqrt(torch.mean(torch.pow(latent_pred.mean - test_y, 2)))
 print(f"Test RMSE: {test_rmse.item()}")
+"""
 
 
 # In[10]:
