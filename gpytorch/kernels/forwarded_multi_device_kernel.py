@@ -7,7 +7,7 @@ from ..lazy import CatLazyTensor, lazify
 from .. import settings
 
 
-class MultiDeviceKernel(DataParallel, Kernel):
+class ForwardedMultiDeviceKernel(DataParallel, Kernel):
     r"""
     Allocates the covariance matrix on distributed devices, e.g. multiple GPUs.
 
@@ -29,7 +29,7 @@ class MultiDeviceKernel(DataParallel, Kernel):
                               module=base_kernel,
                               device_ids=device_ids,
                               output_device=output_device,
-                              dim=-2, F)
+                              dim=-2)
 
         self.output_device = output_device if output_device else device_ids[0]
 
@@ -41,11 +41,20 @@ class MultiDeviceKernel(DataParallel, Kernel):
         return self.module
 
     def forward(self, x1, x2, diag=False, **kwargs):
+        print("In multidevice kernel forward.")
         if diag:
-            return self.module.forward(x1, x2, diag=True, **kwargs).to(self.output_device)
+            pre_output = self.module.forward(x1, x2, diag=True, **kwargs).to(self.output_device)
+            pre_output_F = pre_output.matmul(F)
+            pre_output_F_t = pre_output_F._transpose_nonbatch()
+            out = pre_output_F_t.matmul(F)
+            return out
 
         if x1.size(-2) < len(self.device_ids) + 1:
-            return self.module.forward(x1, x2, diag=diag, **kwargs).to(self.output_device)
+            pre_output = self.module.forward(x1, x2, diag=diag, **kwargs).to(self.output_device)
+            pre_output_F = pre_output.matmul(F)
+            pre_output_F_t = pre_output_F._transpose_nonbatch()
+            out = pre_output_F_t.matmul(F)
+            return out
 
         if not x1.device == self.__cached_x1.device or not torch.equal(x1, self.__cached_x1):
             self._x1_scattered, self._kwargs = self.scatter((x1,), kwargs, self.device_ids)
@@ -58,10 +67,19 @@ class MultiDeviceKernel(DataParallel, Kernel):
         inputs = tuple((x1_[0], x2_) for x1_, x2_ in zip(self._x1_scattered, self._x2_subs))
 
         if not self.device_ids:
-            return self.module.forward(*inputs, **self._kwargs)
+            pre_output = self.module.forward(*inputs, **self._kwargs)
+            pre_output_F = pre_output.matmul(F)
+            pre_output_F_t = pre_output_F._transpose_nonbatch()
+            out = pre_output_F_t.matmul(F)
+            return out
 
         if len(self.device_ids) == 1:
-            return self.module.forward(*inputs[0], **self._kwargs[0])
+            pre_output = self.module.forward(*inputs[0], **self._kwargs[0])
+            pre_output_F = pre_output.matmul(F)
+            pre_output_F_t = pre_output_F._transpose_nonbatch()
+            out = pre_output_F_t.matmul(F)
+
+            return out
 
         # JIT modules can't be pickled and replicated yet
         # But reinitializing the distance_module every forward pass
@@ -78,9 +96,15 @@ class MultiDeviceKernel(DataParallel, Kernel):
             outputs = self.parallel_apply(replicas, inputs, self._kwargs)
 
         pre_output = self.gather(outputs, self.output_device)
+        pre_output_F = pre_output.matmul(F)
+        pre_output_F_t = pre_output_F._transpose_nonbatch()
+
+        out = pre_output_F_t.matmul(F)
+        print("MultiDeviceKernel forward.")
+        print(out.shape)
 
         # Still have to multiply on other side.
-        return pre_output.matmul(F)
+        return out
 
     def gather(self, outputs, output_device):
         return CatLazyTensor(*[lazify(o) for o in outputs], dim=self.dim, output_device=self.output_device)
