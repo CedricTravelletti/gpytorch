@@ -23,6 +23,7 @@ from .sum_lazy_tensor import SumLazyTensor
 from .sum_batch_lazy_tensor import SumBatchLazyTensor
 from .toeplitz_lazy_tensor import ToeplitzLazyTensor
 from .zero_lazy_tensor import ZeroLazyTensor
+from .forwarded_lazy_evaluated_kernel_tensor import ForwardedLazyEvaluatedKernelTensor
 
 
 __all__ = [
@@ -53,4 +54,5 @@ __all__ = [
     "SumBatchLazyTensor",
     "ToeplitzLazyTensor",
     "ZeroLazyTensor",
+    "ForwardedLazyEvaluatedKernelTensor",
 ]

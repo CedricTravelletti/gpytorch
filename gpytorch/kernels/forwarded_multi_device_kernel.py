@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 
 import torch
-from torch.nn.parallel import DataParallel
-from .kernel import Kernel
-from ..lazy import CatLazyTensor, lazify
+from 
 from .. import settings
+from .multi_device_kernel import MultiDeviceKernel
 
 
-class ForwardedMultiDeviceKernel(DataParallel, Kernel):
+class ForwardedMultiDeviceKernel(MultiDeviceKernel):
     r"""
     Allocates the covariance matrix on distributed devices, e.g. multiple GPUs.
+    VERSION FOR INVERSE PROBLEMS.
 
     Args:
         - :attr:`base_kernel`: Base kernel to distribute
@@ -19,29 +19,15 @@ class ForwardedMultiDeviceKernel(DataParallel, Kernel):
 
     def __init__(self, base_kernel, device_ids, F, output_device=None,
                  create_cuda_context=True, **kwargs):
-        # Need to warm up each GPU otherwise scattering in forward will be
-        # EXTREMELY slow. This memory will be available as soon as we leave __init__
-        if create_cuda_context:
-            for d in device_ids:
-                _ = torch.tensor([], device=d)
+        super(ForwardedMultiDeviceKernel, self). __init__(
+            self, base_kernel, device_ids, F, output_device=None,
+            create_cuda_context=True, **kwargs):
 
-        DataParallel.__init__(self,
-                              module=base_kernel,
-                              device_ids=device_ids,
-                              output_device=output_device,
-                              dim=-2)
-
-        self.output_device = output_device if output_device else device_ids[0]
-
-        self.__cached_x1 = torch.empty(1)
-        self.__cached_x2 = torch.empty(1)
-
-    @property
-    def base_kernel(self):
-        return self.module
-
-    def forward(self, x1, x2, diag=False, **kwargs):
-        print("In multidevice kernel forward.")
+        self.F = F
+    def forward(self, x1, x2, diag=False, F=None, **kwargs):
+        print("In forwarded multidevice kernel forward.")
+        if F is None:
+            F = self.F
         if diag:
             pre_output = self.module.forward(x1, x2, diag=True, **kwargs).to(self.output_device)
             pre_output_F = pre_output.matmul(F)
@@ -100,7 +86,7 @@ class ForwardedMultiDeviceKernel(DataParallel, Kernel):
         pre_output_F_t = pre_output_F._transpose_nonbatch()
 
         out = pre_output_F_t.matmul(F)
-        print("MultiDeviceKernel forward.")
+        print("ForwardedMultiDeviceKernel forward.")
         print(out.shape)
 
         # Still have to multiply on other side.
@@ -111,3 +97,22 @@ class ForwardedMultiDeviceKernel(DataParallel, Kernel):
 
     def num_outputs_per_input(self, x1, x2):
         return self.base_kernel.num_outputs_per_input(x1, x2)
+
+    # Override of the kernel one. Only if lazy evaluation is on, we want to
+    # change to lazily evaluated forwarded kernel tensor.
+    def __call__(self, x1, x2=None, diag=False, last_dim_is_batch=False, **params):
+        x1_, x2_ = x1, x2
+
+        # Delegate everything to Kernel class, we only want to override lazy
+        # evaluation.
+        if diag:
+            res = super(ForwardedMultiDeviceKernel, self).__call__(x1_, x2_, diag=True, last_dim_is_batch=last_dim_is_batch, **params)
+
+        else:
+            if settings.lazily_evaluate_kernels.on():
+                res = ForwardedLazyEvaluatedKernelTensor(
+                        x1_, x2_, kernel=self,
+                        last_dim_is_batch=last_dim_is_batch, **params)
+            else:
+                res = super(ForwardedMultiDeviceKernel, self).__call__(x1_, x2_, last_dim_is_batch=last_dim_is_batch, **params)
+            return res
