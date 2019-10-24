@@ -151,7 +151,8 @@ class ExactGPModel(gpytorch.models.ExactGP):
         mean_x = self.mean_module(x)
         covar_x = self.covar_module(x).evaluate()
         print(f"In the model forward {covar_x.shape}")
-        print(type(covar_x))
+        print(f"Type of the covariance matrix: {type(covar_x)}.")
+        print(f"Size of the covariance matrix: {covar_x.shape}.")
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
 def train(train_x,
@@ -172,7 +173,7 @@ def train(train_x,
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
     
-    with gpytorch.beta_features.checkpoint_kernel(checkpoint_size),          gpytorch.settings.max_preconditioner_size(preconditioner_size):
+    with gpytorch.beta_features.checkpoint_kernel(checkpoint_size), gpytorch.settings.max_preconditioner_size(preconditioner_size):
 
         def closure():
             optimizer.zero_grad()
@@ -204,9 +205,12 @@ def train(train_x,
 
 # ## Automatically determining GPU Settings
 # 
-# In the next cell, we automatically determine a roughly reasonable partition or *checkpoint* size that will allow us to train without using more memory than the GPUs available have. Not that this is a coarse estimate of the largest possible checkpoint size, and may be off by as much as a factor of 2. A smarter search here could make up to a 2x performance improvement.
-
-# In[6]:
+# In the next cell, we automatically determine a roughly reasonable partition
+# or *checkpoint* size that will allow us to train without using more memory
+# than the GPUs available have.
+# Not that this is a coarse estimate of the largest possible checkpoint size,
+# and may be off by as much as a factor of 2.
+# A smarter search here could make up to a 2x performance improvement.
 
 
 import gc
