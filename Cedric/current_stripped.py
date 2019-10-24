@@ -17,7 +17,6 @@ import math
 import torch
 import gpytorch
 import sys
-from matplotlib import pyplot as plt
 sys.path.append('../')
 from LBFGS import FullBatchLBFGS
 
@@ -158,6 +157,10 @@ class ExactGPModel(gpytorch.models.ExactGP):
         mean_x = torch.mm(self.F, self.mean_module(x)[:, None]).squeeze()
         print(type(self.covar_module(x)))
         covar_x = torch.mm(F, self.covar_module(x)._matmul(F.t()))
+        print(covar_x)
+        print(np.linalg.cond(covar_x.cpu().numpy()))
+        covar_x = covar_x + 0.1**2 * torch.eye(covar_x.shape[0]).to(output_device)
+        print(np.linalg.cond(covar_x.cpu().numpy()))
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
 def train(train_x,
@@ -224,7 +227,7 @@ preconditioner_size = 1000
 _, _ = train(train_x, train_y,
         n_devices=n_devices, output_device=output_device,
         checkpoint_size=1000,
-        preconditioner_size=preconditioner_size, n_training_iter=1)
+        preconditioner_size=preconditioner_size, n_training_iter=20)
 
 print("Done first call.")
 
