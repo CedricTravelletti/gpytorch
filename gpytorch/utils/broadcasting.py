@@ -10,6 +10,17 @@ def _mul_broadcast_shape(*shapes, error_msg=None):
     num_dims = max(len(shape) for shape in shapes)
     shapes = tuple([1] * (num_dims - len(shape)) + list(shape) for shape in shapes)
 
+    # The original code only works for matrices of the same size.
+    # We here extend it, but only for the case where we have two matrices of 2
+    # dims each.
+    if len(shapes) == 2:
+        if ((len(shapes[0]) == 2) and (len(shapes[1]) == 2)):
+            # Check dimensions.
+            if shapes[0][1] == shapes[1][0]:
+                return torch.Size([shapes[0][0], shapes[1][1]])
+            else:
+                raise RuntimeError("Shapes are not broadcastable for mul operation")
+
     # Make sure that each dimension agrees in size
     final_size = []
     for size_by_dim in zip(*shapes):
