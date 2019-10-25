@@ -15,14 +15,11 @@
 
 import math
 import torch
+import torch.optim
 import gpytorch
 import sys
 sys.path.append('../')
 from LBFGS import FullBatchLBFGS
-
-# get_ipython().run_line_magic('matplotlib', 'inline')
-# get_ipython().run_line_magic('load_ext', 'autoreload')
-# get_ipython().run_line_magic('autoreload', '2')
 
 
 # ## Downloading Data
@@ -48,8 +45,8 @@ data = torch.Tensor(loadmat(f'{dataset}.mat')['data'])
 # ----------------------------------------------------------------------------
 from volcapy.inverse.inverse_problem import InverseProblem
 # niklas_data_path = "/idiap/temp/ctravelletti/tflow/Volcano/data/Cedric.mat"
-# niklas_data_path = "/home/ubuntu/Dev/Data/Cedric.mat"
-niklas_data_path = "/idiap/temp/ctravelletti/tflow/Volcano/data/Cedric.mat"
+niklas_data_path = "/home/ubuntu/Dev/Data/Cedric.mat"
+# niklas_data_path = "/idiap/temp/ctravelletti/tflow/Volcano/data/Cedric.mat"
 inverseProblem = InverseProblem.from_matfile(niklas_data_path)
 n_data = inverseProblem.n_data
 
@@ -176,11 +173,12 @@ def train(train_x,
     model.train()
     likelihood.train()
     
-    optimizer = FullBatchLBFGS(model.parameters(), lr=0.1, debug=True)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
     # "Loss" for GPs - the marginal log likelihood
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
     with gpytorch.beta_features.checkpoint_kernel(checkpoint_size), gpytorch.settings.max_preconditioner_size(preconditioner_size):
+        # Warm up.
         print("Forward pass.")
         output = model(train_x)
         print("Forward pass done.")
@@ -198,9 +196,12 @@ def train(train_x,
         loss.backward()
 
         for i in range(n_training_iter):
+            """
             options = {'closure': closure, 'current_loss': loss, 'max_ls': 10,
                     'ls_debug': True}
-            loss, _, _, _, _, _, _, fail = optimizer.step(options)
+            """
+            # loss, _, _, _, _, _, _, fail = optimizer.step(options)
+            loss = optimizer.step(closure=closure)
             
             print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
                 i + 1, n_training_iter, loss.item(),
@@ -208,9 +209,11 @@ def train(train_x,
                 model.likelihood.noise.item()
             ))
             
+            """
             if fail:
                 print('Convergence reached!')
                 break
+            """
     
     print(f"Finished training on {train_x.size(0)} data points using {n_devices} GPUs.")
     return model, likelihood
@@ -232,7 +235,7 @@ _, _ = train(train_x, train_y,
 print("Done first call.")
 
 # Set a large enough preconditioner size to reduce the number of CG iterations run
-preconditioner_size = 100
+preconditioner_size = 1000
 checkpoint_size = find_best_gpu_setting(train_x, train_y,
                                         n_devices=n_devices, 
                                         output_device=output_device,
@@ -246,8 +249,8 @@ checkpoint_size = find_best_gpu_setting(train_x, train_y,
 
 model, likelihood = train(train_x, train_y,
                           n_devices=n_devices, output_device=output_device,
-                          checkpoint_size=10000,
-                          preconditioner_size=100,
+                          checkpoint_size=30000,
+                          preconditioner_size=1000,
                           n_training_iter=20)
 
 
