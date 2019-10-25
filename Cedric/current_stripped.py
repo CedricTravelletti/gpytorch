@@ -47,19 +47,19 @@ import numpy as np
 
 train_x = cells_coords
 train_y = d_obs
-n_train = train_x.shape[0]
-print(f"Training on {n_train} datapoints.")
+n_train_x = train_x.shape[0]
+n_train_y = train_y.shape[0]
+print(f"Training on {n_train_x} model points.")
+print(f"Training on {n_train_y} datapoints.")
 
-"""
 # normalize features
-mean = train_x.mean(dim=-2, keepdim=True)
-std = train_x.std(dim=-2, keepdim=True) + 1e-6 # prevent dividing by 0
-train_x = (train_x - mean) / std
+mean_x = train_x.mean(dim=-2, keepdim=True)
+std_x = train_x.std(dim=-2, keepdim=True) + 1e-6 # prevent dividing by 0
+train_x = (train_x - mean_x) / std_x
 
 # normalize labels
-mean, std = train_y.mean(),train_y.std()
-train_y = (train_y - mean) / std
-"""
+mean_y, std_y = train_y.mean(),train_y.std()
+train_y = (train_y - mean_y) / std_y
 
 # make continguous
 train_x, train_y = train_x.contiguous(), train_y.contiguous()
@@ -138,8 +138,7 @@ def train(train_x,
         output = model(train_x)
         print("Forward pass done.")
     
-    with (gpytorch.beta_features.checkpoint_kernel(checkpoint_size),
-            gpytorch.settings.max_preconditioner_size(preconditioner_size)):
+    with gpytorch.beta_features.checkpoint_kernel(checkpoint_size), gpytorch.settings.max_preconditioner_size(preconditioner_size):
 
         def closure():
             optimizer.zero_grad()
