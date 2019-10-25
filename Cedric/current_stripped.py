@@ -52,6 +52,10 @@ n_train_y = train_y.shape[0]
 print(f"Training on {n_train_x} model points.")
 print(f"Training on {n_train_y} datapoints.")
 
+
+# ----------------------------------------------
+# Normalization
+# ----------------------------------------------
 # normalize features
 mean_x = train_x.mean(dim=-2, keepdim=True)
 std_x = train_x.std(dim=-2, keepdim=True) + 1e-6 # prevent dividing by 0
@@ -60,6 +64,13 @@ train_x = (train_x - mean_x) / std_x
 # normalize labels
 mean_y, std_y = train_y.mean(),train_y.std()
 train_y = (train_y - mean_y) / std_y
+
+# Measurement noise transformed to rescaled data.
+measurement_noise_std = 0.1 # mGal
+scaled_noise_std = measurement_noise_std / std_y
+# ----------------------------------------------
+# End Normalization
+# ----------------------------------------------
 
 # make continguous
 train_x, train_y = train_x.contiguous(), train_y.contiguous()
@@ -99,7 +110,7 @@ class ExactGPModel(gpytorch.models.ExactGP):
         covar_x = torch.mm(F, self.covar_module(x)._matmul(F.t()))
 
         # Add noise.
-        covar_x = covar_x + 0.1**2 * torch.eye(covar_x.shape[0]).to(output_device)
+        covar_x = covar_x + scaled_noise_std**2 * torch.eye(covar_x.shape[0]).to(output_device)
 
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
